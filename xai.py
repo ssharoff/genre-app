@@ -66,36 +66,75 @@ class XAI:
         """
         Merge subword token attributions into word-level attributions.
         Supports:
-          - WordPiece (BERT/DeBERTa): continuation marked by "##"
-          - SentencePiece (RoBERTa/XLM-R): word starts marked by "▁"
+          - WordPiece (##)
+          - SentencePiece (▁)
+          - Byte-level BPE (Ġ)
         """
+        from collections import defaultdict
         word_attributions = defaultdict(float)
         word_list = []
         current_word = ""
+    
+        # Detect scheme(s) present in this tokenization
+        uses_wp = any(t.startswith("##") for t in tokens)           # WordPiece continuation
+        uses_spm = any(t.startswith("▁") for t in tokens)           # SentencePiece word-start
+        uses_bpe_space = any(t.startswith("Ġ") for t in tokens)     # RoBERTa/GPT-2 space marker
 
-        for i, tok in enumerate(tokens):
-            if tok.startswith("##"):  # WordPiece continuation
-                current_word += tok[2:]
-            elif tok.startswith("▁"):  # SentencePiece word start
-                if current_word:
-                    word_list.append(current_word)
-                current_word = tok[1:]  # strip leading marker
-            else:
-                # New piece without explicit marker: treat as new word
-                if current_word:
-                    word_list.append(current_word)
-                current_word = tok
-
-            val = attributions[i]
+        def add_attr(val, key):
             if hasattr(val, "item"):
                 val = val.item()
-            word_attributions[current_word] += float(val)
-
+            word_attributions[key] += float(val)
+    
+        for i, tok in enumerate(tokens):
+            # --- WordPiece path ---
+            if uses_wp and tok.startswith("##"):
+                piece = tok[2:]
+                current_word += piece
+                add_attr(attributions[i], current_word)
+                continue
+    
+            # --- SentencePiece path (XLM-R/XLNet style) ---
+            if uses_spm:
+                if tok.startswith("▁"):
+                    # start a new word
+                    if current_word:
+                        word_list.append(current_word)
+                    current_word = tok[1:]  # drop leading marker
+                else:
+                    # continuation of the current word
+                    if current_word == "":
+                        current_word = tok
+                    else:
+                        current_word += tok
+                add_attr(attributions[i], current_word)
+                continue
+    
+            # --- Byte-level BPE path (RoBERTa/GPT-2 style) ---
+            if uses_bpe_space:
+                if tok.startswith("Ġ"):
+                    if current_word:
+                        word_list.append(current_word)
+                    current_word = tok[1:]  # drop the space marker
+                else:
+                    if current_word == "":
+                        current_word = tok
+                    else:
+                        current_word += tok
+                add_attr(attributions[i], current_word)
+                continue
+    
+            # --- Fallback: treat non-marked tokens as new words ---
+            if current_word:
+                word_list.append(current_word)
+            current_word = tok
+            add_attr(attributions[i], current_word)
+    
         if current_word:
             word_list.append(current_word)
-
+    
         word_attributions_list = [word_attributions[w] for w in word_list]
         return word_list, word_attributions_list
+
 
     # ----------  XAI ----------
 
