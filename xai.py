@@ -192,62 +192,136 @@ class XAI:
 
     def generate_html(self, label_names=None, top_k_probs=5):
         """
-        Build HTML with highlighted tokens and a small probability bar chart.
-        label_names: optional list or dict mapping id->name for display.
-        top_k_probs: show top-k probabilities.
+        Build HTML with highlighted tokens and a compact probability bar list.
+        - Predicted class bar is GREEN.
+        - Other bars are RED.
+        - Green chips: supports predicted class, Red chips: opposes predicted class.
         """
         words, word_attributions = self.compute_attributions()
         probs = self.predict_probabilities()
-
-        # Probabilities display (top-k)
+    
+        # Sort by prob (desc) and take top-k
         prob_pairs = list(enumerate(probs))
         prob_pairs.sort(key=lambda x: x[1], reverse=True)
         top_pairs = prob_pairs[:top_k_probs]
-
+    
         def label_of(i):
             if isinstance(label_names, dict):
                 return label_names.get(i, str(i))
             if isinstance(label_names, (list, tuple)) and i < len(label_names):
                 return label_names[i]
             return str(i)
-
-        prob_bars = ""
+    
+        # Colors
+        green = "#43A047"   # predicted class bar + positive token attribution
+        red = "#E53935"     # non-predicted bars + negative token attribution
+        track = "#ECEFF1"   # bar track
+        text_muted = "#607D8B"
+    
+        # Build bar list
+        bars_html = ""
         for idx, p in top_pairs:
             name = label_of(idx)
-            prob_bars += f"""
-                <div style="margin-top: 6px;">{name}</div>
-                <div style="width: 100%; height: 18px; background-color: #eee; border-radius: 5px;">
-                    <div style="width: {p * 100:.2f}%; height: 100%; background-color: #4CAF50; border-radius: 5px;"></div>
+            width_pct = max(0.4, p * 100)  # ensure tiny probs are still visible
+            fill = green if idx == self.predicted_label else red
+            value = f"{p:.3f}"
+    
+            bars_html += f"""
+                <div class="bar-row">
+                    <div class="bar-label">{name}</div>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width:{width_pct:.2f}%; background:{fill};"></div>
+                        <div class="bar-value">{value}</div>
+                    </div>
                 </div>
-                <div style="font-size: 12px;">{p:.3f}</div>
             """
-
-        # Highlighted text
+    
+        # Highlighted text chips with tooltips
         max_abs_attr = max(abs(a) for a in word_attributions) if word_attributions else 1.0
         if max_abs_attr == 0:
             max_abs_attr = 1.0
-        token_html = ""
+    
+        chips_html = ""
         for w, s in zip(words, word_attributions):
             alpha = min(1.0, abs(s) / max_abs_attr)
-            # Red = supports predicted class, Green = opposes
-            color = f"rgba(255, 0, 0, {alpha:.2f})" if s > 0 else f"rgba(0, 128, 0, {alpha:.2f})"
-            token_html += f"<span style='background-color:{color}; padding:1px 2px; margin:1px; border-radius:3px;'>{w}</span> "
-
+            # Positive supports predicted class -> green; negative opposes -> red
+            chip_color = f"rgba(67, 160, 71, {alpha:.2f})" if s > 0 else f"rgba(229, 57, 53, {alpha:.2f})"
+            chips_html += (
+                f"<span class='chip' title='attribution: {s:+.4f}' "
+                f"style='background:{chip_color};'>{w}</span>"
+            )
+    
         predicted_name = label_of(self.predicted_label)
-
+    
         html_content = f"""
-        <div style="margin-bottom: 16px;">
-            <h4 style="margin:0 0 8px 0;">Prediction: <code>{predicted_name}</code></h4>
-            <div>{prob_bars}</div>
-            <h4 style="margin:16px 0 8px 0;">Text with Highlighted Words</h4>
-            <p style="line-height:1.9;">{token_html}</p>
-            <div style="margin-top: 6px; font-size: 12px; opacity: 0.8;">
-                <strong>Legend:</strong>
-                <span style="background-color: rgba(255, 0, 0, 0.5); padding: 0 4px; border-radius:3px;">Red</span> supports,
-                <span style="background-color: rgba(0, 128, 0, 0.5); padding: 0 4px; border-radius:3px;">Green</span> opposes
-            </div>
+        <style>
+          .section h4 {{ margin: 0 0 10px 0; }}
+          .bar-row {{
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            align-items: center;
+            gap: 10px;
+            margin: 6px 0;
+          }}
+          .bar-label {{ font-weight: 500; }}
+          .bar-track {{
+            position: relative;
+            height: 20px;
+            background: {track};
+            border-radius: 6px;
+            overflow: hidden;
+          }}
+          .bar-fill {{
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+          }}
+          .bar-value {{
+            position: absolute;
+            right: 8px;
+            top: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            color: {text_muted};
+            font-variant-numeric: tabular-nums;
+          }}
+          .chips {{
+            line-height: 2.1;
+          }}
+          .chip {{
+            display: inline-block;
+            padding: 2px 6px;
+            margin: 2px 4px 2px 0;
+            border-radius: 6px;
+            color: #111;
+            background: #ddd;
+            cursor: default;
+            text-decoration: none;
+          }}
+          .legend small {{ color: {text_muted}; }}
+          .legend .swatch {{
+            display:inline-block; width: 30px; height: 12px; border-radius: 3px; margin: 0 6px -2px 6px;
+          }}
+        </style>
+    
+        <div class="section">
+          <h4>Prediction: <code>{predicted_name}</code></h4>
+          <div>{bars_html}</div>
+    
+          <h4 style="margin-top:16px;">Text with Highlighted Words</h4>
+          <div class="chips">{chips_html}</div>
+    
+          <div class="legend" style="margin-top:8px; font-size:12px;">
+            <strong>Legend:</strong>
+            <span class="swatch" style="background:{green};"></span><small>supports predicted class</small>
+            <span class="swatch" style="background:{red};"></span><small>opposes predicted class</small>
+          </div>
         </div>
         """
+    
         # Table of top attributions
         top_attributions = (
             pd.DataFrame({"Word": words, "Attribution": word_attributions})
@@ -256,5 +330,5 @@ class XAI:
             .drop(columns="Abs")
             .head(10)
         )
-
+    
         return html_content, top_attributions
