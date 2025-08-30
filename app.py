@@ -35,7 +35,7 @@ with col1:
     if input_method == "Paste Text":
         text = st.text_area("✍️ Enter text:", "", height=150)
     else:
-        file = st.file_uploader("📂 Upload a text file", type=["txt"]).
+        file = st.file_uploader("📂 Upload a text file", type=["txt"])
 
     explain_xai = st.checkbox("🔎 Explain Predictions (Captum XAI)")
     predict_clicked = st.button("🔍 Analyse")
