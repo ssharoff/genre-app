@@ -17,6 +17,10 @@ class XAI:
         self.input_ids = None
         self.ref_input_ids = None
         self.predicted_label = None
+        self.tokens = None  # keep for later
+
+        # Ensure eval mode for stable attribution
+        self.model.eval()
 
     def construct_input_ref(self):
         text_ids = self.tokenizer.encode(self.text, add_special_tokens=False)
@@ -51,6 +55,7 @@ class XAI:
                     word_list.append(current_word)
                 current_word = token
 
+            # attributions is already aligned to tokens here
             word_attributions[current_word] += attributions[i].item()
 
         if current_word:
@@ -59,21 +64,32 @@ class XAI:
         word_attributions_list = [word_attributions[word] for word in word_list]
         return word_list, word_attributions_list
 
+    def _logits(self, inputs):
+        """Robustly get logits whether the model returns a tuple or a ModelOutput."""
+        out = self.model(inputs)
+        return out.logits if hasattr(out, "logits") else out[0]
+
     def compute_attributions(self):
         self.input_ids, self.ref_input_ids = self.construct_input_ref()
-        self.tokens = [t for t in self.tokenizer.convert_ids_to_tokens(self.input_ids[0]) if t not in ["[CLS]", "[SEP]"]]
+
+        # Tokens without special tokens for display/aggregation
+        all_tokens = self.tokenizer.convert_ids_to_tokens(self.input_ids[0])
+        self.tokens = [t for t in all_tokens if t not in ["[CLS]", "[SEP]"]]
 
         with torch.no_grad():
-            logits = self.model(self.input_ids)[0]
+            logits = self._logits(self.input_ids)
             probs = torch.softmax(logits, dim=1)
             self.predicted_label = torch.argmax(probs, dim=1).item()
 
         def forward_func(inputs):
-            logits = self.model(inputs)[0]
+            logits = self._logits(inputs)
             probs = torch.softmax(logits, dim=1)
             return probs[:, self.predicted_label]
 
-        lig = LayerIntegratedGradients(forward_func, self.model.bert.embeddings)
+        # MODEL-AGNOSTIC: use the embeddings layer via HF API
+        embeddings_layer = self.model.get_input_embeddings()  # nn.Embedding
+
+        lig = LayerIntegratedGradients(forward_func, embeddings_layer)
 
         attributions, _ = lig.attribute(
             inputs=self.input_ids,
@@ -83,16 +99,22 @@ class XAI:
             return_convergence_delta=True
         )
 
-        token_attributions = attributions.sum(dim=-1).squeeze()
+        # Sum over embedding dim -> one score per token id
+        token_attributions = attributions.sum(dim=-1).squeeze(0)  # shape: [seq_len]
+
+        #ALIGNMENT FIX: drop [CLS] and [SEP] so lengths match self.tokens
+        token_attributions = token_attributions[1:-1]
+
         words, word_attributions = self.aggregate_token_attributions(token_attributions, self.tokens)
 
+        # Normalize for stable coloring
         norm = torch.norm(torch.tensor(word_attributions)) + 1e-8
         normalized = [float(attr) / norm for attr in word_attributions]
 
         return self.filter_stopwords_punctuation(words, normalized, self.text)
 
     def predict_probabilities(self):
-        logits = self.model(self.input_ids)[0]
+        logits = self._logits(self.input_ids)
         probs = torch.softmax(logits, dim=1).squeeze()
         return probs.tolist()
 
