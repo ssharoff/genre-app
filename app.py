@@ -21,6 +21,7 @@ def load_model(model_name):
     return tokenizer, model
 
 labels = {0: 'A1', 1: 'A4', 2: 'A7', 3: 'A8', 4: 'A9', 5: 'A11', 6: 'A12', 7: 'A14', 8: 'A16', 9: 'A17'}
+labels = {0: 'argue', 1: 'fiction', 2: 'instruct', 3: 'newswire', 4: 'regulatory', 5: 'personal', 6: 'promote', 7: 'research', 8: 'reference', 9: 'review'}
 
 
 st.set_page_config(layout="wide")
@@ -55,7 +56,7 @@ with col2:
             inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
             with torch.no_grad():
                 outputs = model(**inputs)
-                st.write(dir(outputs))
+                # st.write(dir(outputs))
                 predicted_class = outputs.logits.argmax().item()
                 label=labels.get(predicted_class, "Prediction error")
                 st.write(f'Predicted genre: {label}')
