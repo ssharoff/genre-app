@@ -27,7 +27,7 @@ labels = {0: 'argue', 1: 'fiction', 2: 'instruct', 3: 'newswire', 4: 'regulatory
 st.set_page_config(layout="wide")
 st.title("Genre classifier")
 
-# Model name (your repo uses an XLM-RoBERTa head)
+# Model name 
 MODEL_NAME = "ssharoff/genres"
 
 col1, col2 = st.columns([1, 2])
@@ -77,7 +77,7 @@ with col2:
                         html_output, top_attributions = xai.generate_html(label_names=labels)
 
                     # Render explanation HTML
-                    st.markdown(html_output, unsafe_allow_html=True)
+                    st.components.v1.html(html_output, height=500, scrolling=True)
 
                     # Show top attributed words
                     st.write("📋 **Top Attributed Words**")
