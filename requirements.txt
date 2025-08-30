@@ -1,0 +1,9 @@
+streamlit
+torch
+transformers
+pandas
+plotly
+captum
+ipython
+nltk
+langdetect
