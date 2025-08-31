@@ -190,7 +190,7 @@ class XAI:
         probs = torch.softmax(logits, dim=1).squeeze(0)
         return probs.tolist()
 
-    def generate_html(self, label_names=None, top_k_probs=5):
+    def generate_html(self, label_names=None, top_k_probs=5, top_k_attributions=10):
         """
         Build HTML with highlighted tokens and a compact probability bar list.
         - Predicted class bar is GREEN.
@@ -328,7 +328,7 @@ class XAI:
             .assign(Abs=lambda df: df["Attribution"].abs())
             .sort_values(by="Abs", ascending=False)
             .drop(columns="Abs")
-            .head(10)
+            .head(top_k_attributions)
         )
     
         return html_content, top_attributions

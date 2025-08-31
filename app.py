@@ -44,6 +44,7 @@ with col1:
     explain_xai = st.checkbox("🔎 Explain Predictions (Captum XAI)")
     predict_clicked = st.button("🔍 Analyse")
 
+    top_k_attributions = st.number_input("Top_k_attributions: ", min_value=0, value=10)
 with col2:
     if predict_clicked:
         # Prepare text
@@ -74,14 +75,14 @@ with col2:
                     with st.spinner("Computing attributions..."):
                         # XAI will re-tokenize because it needs special baseline
                         xai = XAI(text, label_name, tokenizer, model, device)
-                        html_output, top_attributions = xai.generate_html(label_names=labels)
+                        html_output, top_attributions = xai.generate_html(label_names=labels, top_k_attributions=top_k_attributions)
 
                     # Render explanation HTML
                     st.components.v1.html(html_output, height=500, scrolling=True)
 
                     # Show top attributed words
                     st.write("📋 **Top Attributed Words**")
-                    st.dataframe(top_attributions.sort_values(by="Attribution", key=abs))
+                    st.dataframe(top_attributions.sort_values(by="Attribution", key=abs, ascending=False))
 
                     # Download CSV
                     csv = top_attributions.to_csv(index=False).encode("utf-8")
