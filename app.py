@@ -42,9 +42,10 @@ with col1:
             text = file.read().decode("utf-8")
 
     explain_xai = st.checkbox("🔎 Explain Predictions (Captum XAI)")
+    top_k_attributions = st.number_input("Top_k_attributions: ", min_value=0, value=10)
+
     predict_clicked = st.button("🔍 Analyse")
 
-    top_k_attributions = st.number_input("Top_k_attributions: ", min_value=0, value=10)
 with col2:
     if predict_clicked:
         # Prepare text
@@ -68,27 +69,27 @@ with col2:
                     predicted_class = int(logits.argmax(dim=-1).item())
 
                 label_name = labels.get(predicted_class, f"class_{predicted_class}")
-                st.markdown(f"### Predicted genre: **{label_name}**")
+            st.markdown(f"### Predicted genre: **{label_name}**")
 
-                if explain_xai:
-                    st.subheader("🔍 Integrated Gradients Explainability")
-                    with st.spinner("Computing attributions..."):
-                        # XAI will re-tokenize because it needs special baseline
-                        xai = XAI(text, label_name, tokenizer, model, device)
-                        html_output, top_attributions = xai.generate_html(label_names=labels, top_k_attributions=top_k_attributions)
+            if explain_xai:
+                st.subheader("🔍 Integrated Gradients Explainability")
+                with st.spinner("Computing attributions..."):
+                    # XAI will re-tokenize because it needs special baseline
+                    xai = XAI(text, label_name, tokenizer, model, device)
+                    html_output, top_attributions = xai.generate_html(label_names=labels, top_k_attributions=top_k_attributions)
 
-                    # Render explanation HTML
-                    st.components.v1.html(html_output, height=500, scrolling=True)
+                # Render explanation HTML
+                st.components.v1.html(html_output, height=500, scrolling=True)
 
-                    # Show top attributed words
-                    st.write("📋 **Top Attributed Words**")
-                    st.dataframe(top_attributions.sort_values(by="Attribution", key=abs, ascending=False))
+                # Show top attributed words
+                st.write("📋 **Top Attributed Words**")
+                st.dataframe(top_attributions.sort_values(by="Attribution", key=abs, ascending=False))
 
-                    # Download CSV
-                    csv = top_attributions.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label="📥 Download Attributions",
-                        data=csv,
-                        file_name="word_attributions.csv",
-                        mime="text/csv",
-                    )
+                # Download CSV
+                csv = top_attributions.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📥 Download Attributions",
+                    data=csv,
+                    file_name="word_attributions.csv",
+                    mime="text/csv",
+                )
